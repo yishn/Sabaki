@@ -33,6 +33,7 @@ const gtplogger = require('../modules/gtplogger')
 const helper = require('../modules/helper')
 const setting = remote.require('./setting')
 const sound = require('../modules/sound')
+const { GobanGamepad } = require('../modules/gobanGamepad')
 
 class App extends Component {
     constructor() {
@@ -112,7 +113,14 @@ class App extends Component {
             // Info Overlay
 
             infoOverlayText: '',
-            showInfoOverlay: false
+            showInfoOverlay: false,
+
+            // Cursor
+            cursor: {
+                vertex: null,
+                marker: null,
+                previousCursor: null
+            }
         }
 
         this.events = new EventEmitter()
@@ -136,6 +144,36 @@ class App extends Component {
 
         setting.events.on('change', ({key}) => this.updateSettingState(key))
         this.updateSettingState()
+
+        // Gamepad
+        let size = setting.get('game.default_board_size').toString().split(':').map(x => +x)
+        let [width, height] = [size[0], size.slice(-1)[0]]
+        this.gobanGamepad = new GobanGamepad(
+            width, height,
+            // Draw the cursor
+            (vertex, marker, previousCursor) => {
+                let [tree, index] = this.state.treePosition
+                let board = gametree.getBoard(tree, index)
+
+                this.useTool('cross', vertex)
+                if( previousCursor ) {
+                    this.useTool(null, previousCursor)
+                }
+            },
+            // Click on a vertex
+            (vertex) => {
+                this.clickVertex(vertex)
+                this.useTool('cross', vertex)
+            },
+            // Go step
+            (step) => {
+                this.goStep(step)
+            },
+            // Analyze
+            // TODO: find a way to keep the heatmap when moving the cursor.
+            () => {
+                this.startAnalysis()
+            })
     }
 
     componentDidMount() {
@@ -269,6 +307,7 @@ class App extends Component {
             if (['ArrowUp', 'ArrowDown'].includes(evt.key)) {
                 this.stopAutoscrolling()
             }
+            this.gobanGamepad.keyUpCallback(evt)
         })
 
         // Handle window closing
